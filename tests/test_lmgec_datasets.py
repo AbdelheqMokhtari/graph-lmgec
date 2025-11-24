@@ -1,199 +1,150 @@
-"""
-Example script to test LMGEC on 4 benchmark datasets:
-ACM, DBLP, IMDB, Amazon Photos.
-
-It:
-- loads each dataset from graphs.lmgec.datasets
-- builds multi-view features (Hs) similarly to the original code
-- runs LMGEC
-- computes ACC, F1, NMI, ARI, and final loss
-- prints results per dataset
-"""
-
 from __future__ import annotations
 
 import numpy as np
 from itertools import product
 from time import time
-from typing import Callable, Tuple, List
 
+from sklearn.metrics.cluster import normalized_mutual_info_score as nmi
+from sklearn.metrics import adjusted_rand_score as ari
 from sklearn.preprocessing import StandardScaler
-import scipy.sparse as sp
 
-from graphs.lmgec import LMGEC
-from graphs.lmgec.datasets import acm, dblp, imdb, photos
-from graphs.lmgec.metrics import evaluate_clustering
-
-
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-
-
-def _row_normalized_adj(A, beta: float = 1.0):
-    """
-    Simple adjacency preprocessing:
-    S = D̃^{-1} (A + beta * I), using row-normalization.
-
-    Works for dense and sparse matrices.
-    """
-    if sp.issparse(A):
-        A = A.tocsr()
-        n = A.shape[0]
-        A_tilde = A + beta * sp.eye(n, format="csr")
-        d = np.array(A_tilde.sum(axis=1)).ravel()
-        d[d == 0] = 1.0
-        inv_d = 1.0 / d
-        D_inv = sp.diags(inv_d)
-        S = D_inv @ A_tilde
-        return S
-    else:
-        A = np.asarray(A, dtype=float)
-        n = A.shape[0]
-        A_tilde = A + beta * np.eye(n)
-        d = A_tilde.sum(axis=1)
-        d[d == 0] = 1.0
-        S = A_tilde / d[:, None]
-        return S
+from graphs.lmgec import (
+    LMGEC,
+    clustering_accuracy,
+    clustering_f1_score,
+)
+from graphs.lmgec.datasets import (
+    datagen,
+    preprocess_dataset,
+)
 
 
-def _build_views_Hs(
-    As: List,
-    Xs: List,
+def run_single_dataset(
+    dataset: str,
+    temperature: float = 1.0,
     beta: float = 1.0,
-    standardize: bool = True,
-) -> List[np.ndarray]:
-    """
-    Mimic what the original run.py does:
-
-    views = list(product(As, Xs))
-    for each (A, X):
-        S, features = preprocess_dataset(...)
-        H = S @ features
-        Hs.append(StandardScaler(with_std=False).fit_transform(H))
-
-    Here we implement a simple version:
-    - S = row-normalized (A + beta I)
-    - features = X as given
-    - H = S @ X
-    """
-    from itertools import product
-
-    Hs: List[np.ndarray] = []
-
-    for A, X in product(As, Xs):
-        S = _row_normalized_adj(A, beta=beta)
-
-        # convert X to dense if needed
-        if sp.issparse(X):
-            X = X.toarray()
-        else:
-            X = np.asarray(X, dtype=float)
-
-        # S @ X can be sparse or dense depending on S
-        HX = S @ X
-        if sp.issparse(HX):
-            HX = HX.toarray()
-
-        if standardize:
-            HX = StandardScaler(with_std=False).fit_transform(HX)
-
-        Hs.append(HX.astype(float))
-
-    return Hs
-
-
-def _run_single_dataset(
-    name: str,
-    loader: Callable[[], Tuple[List, List, np.ndarray]],
-    beta: float = 1.0,
-    tau: float = 1.0,
     max_iter: int = 10,
+    tol: float = 0.0,
+    runs: int = 1,
     random_state: int = 0,
 ):
     """
-    Load a dataset, build Hs, run LMGEC, and print metrics.
+    Reproduce the original run.py pipeline for a single dataset,
+    using the LMGEC class instead of the TensorFlow function.
     """
-    print(f"\n==================== {name.upper()} ====================")
+    print(f"\n----------------- {dataset} -----------------")
 
-    # 1. Load dataset
-    As, Xs, labels = loader()
-    labels = np.asarray(labels).ravel()
+    # Load dataset
+    As, Xs, labels = datagen(dataset)
+    labels = np.asarray(labels).reshape(-1)
     k = len(np.unique(labels))
-    print(f"Number of nodes: {len(labels)}, number of clusters: {k}")
 
-    # 2. Build multi-view features Hs (one per (A, X) combination)
-    Hs = _build_views_Hs(As, Xs, beta=beta, standardize=True)
-    print(f"Number of views (Hs): {len(Hs)}")
+    # All combinations of topology and features, like original code
+    views = list(product(As, Xs))
 
-    # 3. Run LMGEC
-    model = LMGEC(
-        n_clusters=k,
-        n_components=k + 1,
-        tau=tau,
-        max_iter=max_iter,
-        tol=0.0,
-        random_state=random_state,
+    # Preprocess each view as in utils.preprocess_dataset()
+    for v in range(len(views)):
+        A, X = views[v]
+        tf_idf = dataset.lower() in ["acm", "dblp", "imdb", "photos"]
+        norm_adj, features = preprocess_dataset(A, X, tf_idf=tf_idf, beta=beta)
+
+        if not isinstance(features, np.ndarray):
+            features = features.toarray()
+
+        # Original code handles np.matrix explicitly; we do the same
+        if type(norm_adj) == np.matrix:
+            norm_adj = np.asarray(norm_adj)
+
+        views[v] = (norm_adj, features)
+
+    metrics = {
+        "acc": [],
+        "nmi": [],
+        "ari": [],
+        "f1": [],
+        "loss": [],
+        "time": [],
+    }
+
+    for run in range(runs):
+        t0 = time()
+
+        # Build Hs exactly as in run.py: H = S @ X, then StandardScaler
+        Hs = []
+        for S, X in views:
+            features = S @ X
+            x = StandardScaler(with_std=False).fit_transform(features)
+            Hs.append(x)
+
+        # Run our NumPy implementation of LMGEC
+        model = LMGEC(
+            n_clusters=k,
+            n_components=k + 1,
+            tau=temperature,
+            max_iter=max_iter,
+            tol=tol,
+            random_state=None if random_state is None else random_state + run,
+        )
+
+        Z = model.fit_predict(Hs)  # Z corresponds to G (cluster labels)
+        elapsed = time() - t0
+
+        final_loss = (
+            model.loss_history_[-1]
+            if model.loss_history_ is not None and len(model.loss_history_) > 0
+            else np.nan
+        )
+
+        metrics["time"].append(elapsed)
+        metrics["acc"].append(clustering_accuracy(labels, Z))
+        metrics["nmi"].append(nmi(labels, Z))
+        metrics["ari"].append(ari(labels, Z))
+        metrics["f1"].append(
+            clustering_f1_score(labels, Z, average="macro")
+        )
+        metrics["loss"].append(final_loss)
+
+    results_mean = {k: float(np.mean(v)) for k, v in metrics.items()}
+    results_std = {k: float(np.std(v)) for k, v in metrics.items()}
+
+    print(
+        f"ACC={results_mean['acc']:.4f}±{results_std['acc']:.4f}, "
+        f"F1={results_mean['f1']:.4f}±{results_std['f1']:.4f}, "
+        f"NMI={results_mean['nmi']:.4f}±{results_std['nmi']:.4f}, "
+        f"ARI={results_mean['ari']:.4f}±{results_std['ari']:.4f}"
     )
 
-    t0 = time()
-    y_pred = model.fit_predict(Hs)
-    elapsed = time() - t0
-
-    # 4. Metrics
-    final_loss = (
-        model.loss_history_[-1] if model.loss_history_ is not None else None
-    )
-    metrics = evaluate_clustering(labels, y_pred, loss=final_loss)
-
-    print(f"Time: {elapsed:.4f} s")
-    print(f"ACC:  {metrics['acc']:.4f}")
-    print(f"F1:   {metrics['f1']:.4f}")
-    print(f"NMI:  {metrics['nmi']:.4f}")
-    print(f"ARI:  {metrics['ari']:.4f}")
-    if "loss" in metrics:
-        print(f"Loss: {metrics['loss']:.4f}")
-
-    return metrics
+    return {"mean": results_mean, "std": results_std}
 
 
 def main():
-    """
-    Run LMGEC on 4 datasets and print metrics.
-    """
-    beta = 2.0         # self-loop weight in adjacency normalization
-    tau = 10.0          # temperature for view-weight softmax
-    max_iter = 3
-    random_state = 0
+    # You can change this list to run specific datasets
+    datasets = ["acm", "dblp", "imdb", "photos"]
 
-    datasets = [
-        ("acm", acm),
-        ("dblp", dblp),
-        ("imdb", imdb),
-        ("photos", photos),
-    ]
-
-    results = {}
-    for name, loader in datasets:
-        metrics = _run_single_dataset(
-            name,
-            loader,
-            beta=beta,
-            tau=tau,
-            max_iter=max_iter,
-            random_state=random_state,
+    all_results = {}
+    for ds in datasets:
+        res = run_single_dataset(
+            dataset=ds,
+            temperature=10.0,
+            beta=2.0,
+            max_iter=3,
+            tol=0.0,
+            runs=1,
+            random_state=0,
         )
-        results[name] = metrics
+        all_results[ds] = res
 
     print("\n==================== SUMMARY ====================")
-    for name, m in results.items():
+    for ds, res in all_results.items():
+        m = res["mean"]
         print(
-            f"{name.upper()}: "
+            f"{ds.upper()}: "
             f"ACC={m['acc']:.4f}, "
             f"F1={m['f1']:.4f}, "
             f"NMI={m['nmi']:.4f}, "
             f"ARI={m['ari']:.4f}, "
-            f"Loss={m.get('loss', float('nan')):.4f}"
+            f"Loss={m['loss']:.4f}, "
+            f"Time={m['time']:.4f}s"
         )
 
 
