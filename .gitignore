@@ -1,0 +1,3 @@
+__pycache__/
+src/graph_lmgec.egg-info/
+src/graphs/lmgec/datasets/*.mat
