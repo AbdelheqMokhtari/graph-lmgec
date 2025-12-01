@@ -119,18 +119,18 @@ def run_single_dataset(
 
 def main():
     # You can change this list to run specific datasets
-    datasets = ["acm", "dblp", "imdb", "photos"]
+    datasets = ["acm", "dblp", "imdb", "photos", "wiki"]
 
     all_results = {}
     for ds in datasets:
         res = run_single_dataset(
             dataset=ds,
-            temperature=10.0,
-            beta=2.0,
+            temperature=1.0,
+            beta=1.0,
             max_iter=3,
             tol=0.0,
             runs=1,
-            random_state=0,
+            random_state=42,
         )
         all_results[ds] = res
 

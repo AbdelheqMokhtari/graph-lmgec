@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0", "wheel"]
 
 [project]
 name = "graph-lmgec"   # Name of the project (pip install graph-lmgec)
-version = "0.0.1"      # Version of the project
+version = "0.1.0"      # Version of the project
 description = "Python package for multi-view graphs clustering and representation learning algorithms."
 readme = "README.md"   # Path to the README file
 requires-python = ">=3.8"  # Minimum Python version required
