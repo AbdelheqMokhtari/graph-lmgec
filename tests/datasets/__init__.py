@@ -96,6 +96,75 @@ def wiki() -> Tuple[List[sp.spmatrix], List[np.ndarray], np.ndarray]:
     return As, Xs, labels
 
 
+
+
+def leaves() -> Tuple[List[sp.spmatrix], List[np.ndarray], np.ndarray]:
+    # Load the .mat file
+    data = _load_mat_from_package("100Leaves")
+
+    # X is a 3×1 cell-like structure: X[0], X[1], X[2]
+    X_views_raw = data["X"].reshape(-1)     # flatten 3x1 into list of 3 elements
+    
+    # Convert each view to numpy array
+    Xs = [np.array(view, dtype=float) for view in X_views_raw]
+
+    # Labels (usually stored separately)
+    labels = data["y"].reshape(-1)
+
+    As = []
+    for X in Xs:
+        A_knn = kneighbors_graph(X, 5, metric="cosine")
+        As.append(A_knn)
+
+    return As, Xs, labels
+
+def mnist() -> Tuple[List[sp.spmatrix], List[np.ndarray], np.ndarray]:
+    # Load the .mat file
+    data = _load_mat_from_package("MNIST-4")
+
+    # X is a 3×1 cell-like structure: X[0], X[1], X[2]
+    X_views_raw = data["X"].reshape(-1)     # flatten 3x1 into list of 3 elements
+    
+    # Convert each view to numpy array
+    Xs = [np.array(view, dtype=float) for view in X_views_raw]
+
+    # Labels (usually stored separately)
+    labels = data["y"].reshape(-1)
+
+    As = []
+    for X in Xs:
+        A_knn = kneighbors_graph(X, 5, metric="cosine")
+        As.append(A_knn)
+
+    return As, Xs, labels
+
+
+def load_multiview_dataset(name: str) -> Tuple[List[sp.spmatrix], List[np.ndarray], np.ndarray]:
+    """
+    Generic loader for multi-view datasets stored as:
+        X : 3×1 (or n×1) cell array of feature views
+        y : labels
+    """
+    # Load .mat file from your package
+    data = _load_mat_from_package(name)
+
+    # X is a cell array: X[0], X[1], X[2], ...
+    X_raw = data["X"].reshape(-1)  # flatten to list
+
+    # Convert each view into a numpy array
+    Xs = [np.array(view, dtype=float) for view in X_raw]
+
+    # Labels
+    labels = data["y"].reshape(-1)
+
+    # Build an adjacency matrix for each view
+    As = [
+        kneighbors_graph(X, 5, metric="cosine")
+        for X in Xs
+    ]
+
+    return As, Xs, labels
+
 def datagen(dataset: str):
     """
     Dispatch to a specific dataset loader, exactly like original utils.datagen().
@@ -111,6 +180,10 @@ def datagen(dataset: str):
         return photos()
     if dataset == "wiki":
         return wiki()
+    if dataset == "leaves":
+        return leaves()
+    if dataset == "mnist":
+        return mnist()
     raise ValueError(f"Unknown dataset: {dataset}")
 
 

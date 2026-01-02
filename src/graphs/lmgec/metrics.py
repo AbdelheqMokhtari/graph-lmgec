@@ -49,3 +49,27 @@ def evaluate_clustering(y_true, y_pred, average: str = "macro"):
     f1 = clustering_f1_score(y_true, y_pred, average=average)
     return {"acc": acc, "f1": f1}
 
+
+def evaluate_clustering(y_pred, y_true=None, X=None, average="macro"):
+    """
+    Compute clustering metrics (External & Internal).
+    """
+    scores = {}
+
+    # A. External Validation (Needs Ground Truth)
+    if y_true is not None:
+        scores["ACC"] = clustering_accuracy(y_true, y_pred)
+        scores["F1"] = clustering_f1_score(y_true, y_pred, average=average)
+        scores["NMI"] = metrics.normalized_mutual_info_score(y_true, y_pred)
+        scores["ARI"] = metrics.adjusted_rand_score(y_true, y_pred)
+
+    # B. Internal Validation (Needs Embeddings X)
+    if X is not None:
+        # Avoid expensive silhouette on huge datasets
+        if X.shape[0] < 20000:
+            scores["Silhouette"] = metrics.silhouette_score(X, y_pred)
+        
+        scores["CH_Score"] = metrics.calinski_harabasz_score(X, y_pred)
+        scores["DB_Score"] = metrics.davies_bouldin_score(X, y_pred)
+
+    return scores

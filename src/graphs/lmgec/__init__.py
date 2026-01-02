@@ -6,6 +6,14 @@ Implementation of the LMGEC algorithm for graph clustering and representation le
 Main entry point:
 
 """
+import importlib.metadata
+
+try:
+    # This must match the 'name' in your pyproject.toml
+    __version__ = importlib.metadata.version("graph-lmgec")
+except importlib.metadata.PackageNotFoundError:
+    # Fallback if the package is not installed (e.g., local dev without -e)
+    __version__ = "unknown"
 
 from .model import LMGEC
 from .metrics import (
@@ -14,8 +22,7 @@ from .metrics import (
     evaluate_clustering,
 )
 from .utils import (
-    preprocess_dataset,
-
+    get_propagated_features
 )
 
 __all__ = [
