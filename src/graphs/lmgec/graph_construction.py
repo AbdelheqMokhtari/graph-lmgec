@@ -3,116 +3,99 @@ import scipy.sparse as sp
 from sklearn.neighbors import kneighbors_graph
 from sklearn.metrics.pairwise import rbf_kernel, cosine_similarity
 
-def build_knn_graph(X, k=10, metric='euclidean', mode='connectivity', include_self=False):
+class GraphBuilder:
     """
-    Constructs a k-Nearest Neighbors graph.
-    
-    Args:
-        X (array-like): Feature matrix of shape (n_samples, n_features).
-        k (int): Number of neighbors to consider for each node.
-        metric (str): Distance metric ('euclidean', 'cosine', 'minkowski', etc.).
-        mode (str): 'connectivity' (0/1) or 'distance' (actual distances).
-        include_self (bool): If True, A[i,i] = 1.
-        
-    Returns:
-        sp.csr_matrix: Sparse adjacency matrix.
+    A utility class to construct graph structures (Adjacency Matrices)
+    from raw feature matrices using various similarity measures.
     """
-    # sklearn includes the point itself as a neighbor in some versions, 
-    # so we ask for k, then ensure diagonal is handled manually.
-    A = kneighbors_graph(X, n_neighbors=k, mode=mode, metric=metric, include_self=include_self)
-    
-    # Ensure it is a symmetric graph (optional but recommended for spectral clustering)
-    # A = 0.5 * (A + A.T) 
-    
-    return A
 
-def build_gaussian_graph(X, sigma=1.0, threshold=0.0, k=None):
-    """
-    Constructs a graph using Gaussian (RBF) Kernel similarity.
-    Formula: A_ij = exp( - ||x_i - x_j||^2 / (2 * sigma^2) )
-    
-    Args:
-        X (array-like): Feature matrix.
-        sigma (float): Bandwidth parameter. Controls how quickly similarity drops.
-        threshold (float): Edges with weight < threshold are set to 0 (sparsification).
-        k (int): If not None, keeps only the top-k weights per node (sparsification).
+    @staticmethod
+    def build(Xs, method='knn', **kwargs):
+        """
+        Master function to build graphs for a list of feature matrices.
         
-    Returns:
-        sp.csr_matrix: Sparse adjacency matrix.
-    """
-    gamma = 1.0 / (2.0 * sigma**2)
-    A_dense = rbf_kernel(X, gamma=gamma)
-    
-    # Remove self-loops (diagonal = 1.0) usually needed for GNNs that add it later
-    np.fill_diagonal(A_dense, 0.0)
-    
-    if k is not None:
-        # Keep only top-k neighbors
-        nb_samples = A_dense.shape[0]
-        for i in range(nb_samples):
-            # argsort gives indices of smallest to largest. We want largest.
-            # We take the last k elements
-            top_k_idx = np.argsort(A_dense[i])[-k:]
+        Args:
+            Xs (list of np.ndarray): List of feature matrices [X1, X2, ...].
+            method (str): 'knn', 'rbf' (gaussian), or 'cosine'.
+            **kwargs: Parameters specific to the method (e.g., k=10, sigma=1.0).
             
-            # Create a mask to zero out everything else
-            mask = np.zeros(nb_samples, dtype=bool)
-            mask[top_k_idx] = True
-            A_dense[i][~mask] = 0.0
-
-    if threshold > 0:
-        A_dense[A_dense < threshold] = 0.0
-        
-    return sp.csr_matrix(A_dense)
-
-def build_cosine_graph(X, k=None, threshold=0.0):
-    """
-    Constructs a graph based on Cosine Similarity.
-    Good for text data (Bag of Words, TF-IDF).
-    
-    Args:
-        X (array-like): Feature matrix.
-        k (int): Keep top-k similar neighbors.
-        threshold (float): Zero out similarities below this value.
-        
-    Returns:
-        sp.csr_matrix: Sparse adjacency matrix.
-    """
-    A_dense = cosine_similarity(X)
-    np.fill_diagonal(A_dense, 0.0)
-    
-    if k is not None:
-        nb_samples = A_dense.shape[0]
-        for i in range(nb_samples):
-            top_k_idx = np.argsort(A_dense[i])[-k:]
-            mask = np.zeros(nb_samples, dtype=bool)
-            mask[top_k_idx] = True
-            A_dense[i][~mask] = 0.0
+        Returns:
+            list: List of adjacency matrices [A1, A2, ...].
+        """
+        graphs = []
+        for i, X in enumerate(Xs):
+            print(f"Building graph for View {i+1} using {method}...")
             
-    if threshold > 0:
-        A_dense[A_dense < threshold] = 0.0
-        
-    return sp.csr_matrix(A_dense)
+            if method == 'knn':
+                adj = GraphBuilder.knn(X, **kwargs)
+            elif method == 'rbf' or method == 'gaussian':
+                adj = GraphBuilder.rbf(X, **kwargs)
+            elif method == 'cosine':
+                adj = GraphBuilder.cosine(X, **kwargs)
+            else:
+                raise ValueError(f"Unknown method: {method}")
+                
+            graphs.append(adj)
+        return graphs
 
-def generate_multiview_graphs(Xs, method='knn', **kwargs):
-    """
-    Helper to process a list of feature matrices into a list of graphs.
-    
-    Args:
-        Xs (list of arrays): List of feature matrices [X1, X2, ...]
-        method (str): 'knn', 'gaussian', or 'cosine'
-        **kwargs: Arguments passed to the builder (e.g., k=10, sigma=1.0)
+    @staticmethod
+    def knn(X, k=10, metric='euclidean', mode='connectivity', include_self=False):
+        """
+        Constructs a K-Nearest Neighbors graph.
         
-    Returns:
-        list of sp.csr_matrix: The generated adjacency matrices.
-    """
-    builders = {
-        'knn': build_knn_graph,
-        'gaussian': build_gaussian_graph,
-        'cosine': build_cosine_graph
-    }
-    
-    if method not in builders:
-        raise ValueError(f"Unknown method '{method}'. Choose from {list(builders.keys())}")
+        Args:
+            k (int): Number of neighbors.
+            metric (str): Distance metric ('euclidean', 'cosine', etc.).
+            mode (str): 'connectivity' (0/1) or 'distance' (weighted).
+            include_self (bool): If True, A[i,i] = 1.
+        """
+        A = kneighbors_graph(X, n_neighbors=k, metric=metric, mode=mode, include_self=include_self)
+        return A
+
+    @staticmethod
+    def rbf(X, sigma=1.0, threshold=None, k=None):
+        """
+        Constructs a Gaussian (RBF) Kernel graph.
+        A_ij = exp(- ||x_i - x_j||^2 / (2 * sigma^2))
+        """
+        gamma = 1.0 / (2.0 * sigma**2)
+        A = rbf_kernel(X, gamma=gamma)
         
-    builder_func = builders[method]
-    return [builder_func(X, **kwargs) for X in Xs]
+        # Sparsification
+        if threshold is not None:
+            A[A < threshold] = 0.0
+            
+        if k is not None:
+            # Keep only top-k values per row to ensure sparsity
+            # (Simple implementation: brute-force per row)
+            for i in range(A.shape[0]):
+                # Indices of values that are NOT in the top-k
+                # argsort gives ascending, so we take the start of the array
+                lower_indices = np.argsort(A[i])[:-(k+1)]
+                A[i][lower_indices] = 0.0
+
+        # Convert to sparse for efficiency
+        return sp.csr_matrix(A)
+
+    @staticmethod
+    def cosine(X, k=None, threshold=None):
+        """
+        Constructs a Cosine Similarity graph.
+        Great for text data (Cora, ACM, high-dim sparse vectors).
+        """
+        # 1. Compute Cosine Similarity (-1 to 1)
+        A = cosine_similarity(X)
+        
+        # 2. Keep only positive correlations
+        A[A < 0] = 0
+        
+        # 3. Sparsify
+        if threshold is not None:
+            A[A < threshold] = 0
+            
+        if k is not None:
+            for i in range(A.shape[0]):
+                lower_indices = np.argsort(A[i])[:-(k+1)]
+                A[i][lower_indices] = 0.0
+                
+        return sp.csr_matrix(A)
