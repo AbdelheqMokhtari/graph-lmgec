@@ -25,6 +25,8 @@ from .utils import (
     get_propagated_features
 )
 
+from .graph_construction import build_knn_graph, build_gaussian_graph, generate_multiview_graphs
+
 __all__ = [
     "LMGEC",
     "clustering_accuracy",
