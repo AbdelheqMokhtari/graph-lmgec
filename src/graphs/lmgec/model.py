@@ -14,11 +14,7 @@ import numpy as np
 from .utils import get_propagated_features
 from .metrics import evaluate_clustering
 import warnings
-
-# Add 'metrics' from sklearn
 from sklearn import metrics 
-
-# Update your local import to include the specific matching functions
 from .metrics import evaluate_clustering, clustering_accuracy, clustering_f1_score
 
 def _update_rule_F(XW, G, K):
