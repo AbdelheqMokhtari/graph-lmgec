@@ -9,7 +9,7 @@ import networkx as nx
 
 class Visualizer:
     """
-    A toolkit for visualizing Graph Clustering results.
+    visualizing Graph Clustering results.
     """
 
     @staticmethod
@@ -19,7 +19,7 @@ class Visualizer:
         1. Fixes 1-based indexing (1..6 -> 0..5).
         2. Uses Hungarian Algorithm to match predicted cluster ID to true class ID.
         """
-        # --- Step 1: Fix Indexing (Remove "Extra Class") ---
+        # Fix Indexing (Remove "Extra Class") 
         # If y_true starts at 1, shift it to 0
         if y_true.min() == 1 and y_pred.min() == 0:
             y_true = y_true - 1
@@ -29,7 +29,7 @@ class Visualizer:
         unique_true = np.unique(y_true)
         n_classes = len(unique_true)
         
-        # --- Step 2: Hungarian Matching ---
+        # Hungarian Matching
         # Compute the cost matrix (negative confusion matrix)
         # We want to maximize the diagonal (matches), so we minimize the negative
         cm = confusion_matrix(y_true, y_pred)
@@ -82,10 +82,9 @@ class Visualizer:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
 
-    # ... (Keep plot_embedding and plot_graph_structure as they were) ...
+    # Keep plot_embedding and plot_graph_structure as they were
     @staticmethod
     def plot_embedding(H, labels, method='tsne', title="Embedding Visualization", save_path=None):
-        # (Same code as before)
         print(f"Running {method.upper()} reduction...")
         if method == 'tsne':
             reducer = TSNE(n_components=2, random_state=42, init='pca', learning_rate='auto')
@@ -106,7 +105,6 @@ class Visualizer:
 
     @staticmethod
     def plot_graph_structure(adj, labels=None, max_nodes=500, title="Graph Structure"):
-        # (Same code as before)
         import scipy.sparse as sp
         if adj.shape[0] > max_nodes:
             print(f"Graph too large ({adj.shape[0]} nodes). Plotting first {max_nodes} nodes only.")
