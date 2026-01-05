@@ -1,12 +1,10 @@
 """
 LMGEC model definition.
 
-NumPy / scikit-learn implementation of the LMGEC (Linear Multi-view Graph
-Embedding Clustering) algorithm, originally implemented in TensorFlow.
-
+implementation of the LMGEC (Linear Multi-view Graph Embedding Clustering) algorithm.
 This module exposes:
 
-- LMGEC: sklearn-style estimator with fit / fit_predict and accessors.
+- LMGEC: estimator with fit / fit_predict and accessors.
 """
 
 import tensorflow as tf

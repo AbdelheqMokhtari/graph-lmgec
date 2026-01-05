@@ -26,6 +26,7 @@ from .utils import (
 )
 
 from .graph_construction import GraphBuilder
+from .visualization import Visualizer
 
 __all__ = [
     "LMGEC",

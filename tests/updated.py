@@ -25,3 +25,6 @@ print(f"NMI:      {model.nmi():.4f}")
 print(f"Silhouette: {model.silhouette():.4f}")
 
 print("\nSuccess! The package is working.")
+
+
+
