@@ -52,6 +52,14 @@ def get_propagated_features(adj, features, beta=1.0, tf_idf=False, center=True, 
         center: Whether to center data (Mean=0). LMGEC usually requires this.
         scale: Whether to scale data (Variance=1). "Centré-Réduit" if True.
     """
+
+    # Centering / Scaling
+    if center or scale:
+        # with_mean=True -> Centré (Centered)
+        # with_std=True  -> Réduit (Reduced/Scaled)
+        scaler = StandardScaler(with_mean=center, with_std=scale)
+        features = scaler.fit_transform(features)
+
     # Feature Normalization (L2 or TF-IDF)
     X = preprocess_features(features, tf_idf=tf_idf)
 
@@ -68,11 +76,6 @@ def get_propagated_features(adj, features, beta=1.0, tf_idf=False, center=True, 
     elif isinstance(H, np.matrix):
         H = np.asarray(H)
 
-    # Centering / Scaling
-    if center or scale:
-        # with_mean=True -> Centré (Centered)
-        # with_std=True  -> Réduit (Reduced/Scaled)
-        scaler = StandardScaler(with_mean=center, with_std=scale)
-        H = scaler.fit_transform(H)
+
 
     return H
