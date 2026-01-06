@@ -88,7 +88,6 @@ class LMGEC:
         self.loss_history_ = None
 
     def _init_W(self, X):
-        """Internal helper to initialize W using SVD."""
         n_features = X.shape[1]
         
         # Check if requested embedding is too large
@@ -180,8 +179,8 @@ class LMGEC:
         
         results = evaluate_clustering(
             y_pred=self.G_,
-            y_true=target_labels,     # Can be None
-            X=self.XW_consensus_      # Used for Silhouette/CH/DB
+            y_true=target_labels,     
+            X=self.XW_consensus_      
         )
         
         print("\n--- Evaluation Results ---")
@@ -190,9 +189,9 @@ class LMGEC:
             
         return results
 
-    # --- Helper for External Metrics ---
+    # Helper for External Metrics 
     def _get_labels(self, y_true):
-        """Internal helper to resolve which labels to use."""
+
         if self.G_ is None:
             raise RuntimeError("Model not fitted yet. Call fit() first.")
             
@@ -208,29 +207,24 @@ class LMGEC:
     # --- External Metrics (Require Ground Truth) ---
     
     def accuracy(self, y_true=None):
-        """Returns Clustering Accuracy (Hungarian matching)."""
         labels = self._get_labels(y_true)
         return clustering_accuracy(labels, self.G_)
 
     def f1_score(self, y_true=None, average="macro"):
-        """Returns F1 Score (Hungarian matching)."""
         labels = self._get_labels(y_true)
         return clustering_f1_score(labels, self.G_, average=average)
 
     def nmi(self, y_true=None):
-        """Returns Normalized Mutual Information."""
         labels = self._get_labels(y_true)
         return metrics.normalized_mutual_info_score(labels, self.G_)
 
     def ari(self, y_true=None):
-        """Returns Adjusted Rand Index."""
         labels = self._get_labels(y_true)
         return metrics.adjusted_rand_score(labels, self.G_)
 
     # --- Internal Metrics (No Labels Needed) ---
 
     def silhouette(self):
-        """Returns Silhouette Coefficient (Geometric quality)."""
         if self.XW_consensus_ is None:
             raise RuntimeError("Model not fitted.")
         if self.XW_consensus_.shape[0] > 20000:
@@ -238,13 +232,11 @@ class LMGEC:
         return metrics.silhouette_score(self.XW_consensus_, self.G_)
 
     def davies_bouldin(self):
-        """Returns Davies-Bouldin Index (Lower is better)."""
         if self.XW_consensus_ is None:
             raise RuntimeError("Model not fitted.")
         return metrics.davies_bouldin_score(self.XW_consensus_, self.G_)
     
     def calinski_harabasz(self):
-        """Returns Calinski-Harabasz Index (Higher is better)."""
         if self.XW_consensus_ is None:
             raise RuntimeError("Model not fitted.")
         return metrics.calinski_harabasz_score(self.XW_consensus_, self.G_)
