@@ -7,8 +7,6 @@ from sklearn.preprocessing import normalize, StandardScaler
 from sklearn.feature_extraction.text import TfidfTransformer
 
 
-
-
 def preprocess_graph(adj, beta=1.0):
     """
     Computes the linear propagation matrix S (Eq 5).
@@ -30,13 +28,33 @@ def preprocess_graph(adj, beta=1.0):
     
     return S
 
-def preprocess_features(features, tf_idf=False):
+
+def preprocess_features(features, tf_idf=False, center=False, scale=False):
     """
-    Normalizes features (TF-IDF or L2).
+    tf_idf: Normalizes features if tf_idf = True it's TF-IDF otherwise L2.
+    center: Whether to center data (Mean=0). LMGEC usually requires this.
+    scale: Whether to scale data (Variance=1). "Centré-Réduit" if True.
+
     """
     if tf_idf:
         features = TfidfTransformer(norm="l2").fit_transform(features)
-    else: 
+    
+    if center or scale:
+
+        if sp.issparse(features):
+            if center:
+                # SAFE MODE: Turn off centering to save RAM
+                print("Warning: Disabling centering on sparse data to prevent Memory Crash.")
+                center = False
+            scaler = StandardScaler(with_mean=center, with_std=scale)
+            features = scaler.fit_transform(features)
+        else : 
+            # with_mean=True -> Centré (Centered)
+            # with_std=True  -> Réduit (Reduced/Scaled)
+            scaler = StandardScaler(with_mean=center, with_std=scale)
+            features = scaler.fit_transform(features)
+
+    if not tf_idf: 
         features = normalize(features, norm="l2")
     return features
 
@@ -49,33 +67,18 @@ def get_propagated_features(adj, features, beta=1.0, tf_idf=False, center=True, 
         features: Feature matrix.
         beta: Graph self-loop weight.
         tf_idf: Whether to use TF-IDF normalization on raw features.
-        center: Whether to center data (Mean=0). LMGEC usually requires this.
-        scale: Whether to scale data (Variance=1). "Centré-Réduit" if True.
     """
 
-    # Centering / Scaling
-    if center or scale:
-        # with_mean=True -> Centré (Centered)
-        # with_std=True  -> Réduit (Reduced/Scaled)
-        scaler = StandardScaler(with_mean=center, with_std=scale)
-        features = scaler.fit_transform(features)
-
-    # Feature Normalization (L2 or TF-IDF)
-    X = preprocess_features(features, tf_idf=tf_idf)
-
-    # Propagation (H = SX)
     if adj is None:
-        H = X
-    else:
-        S = preprocess_graph(adj, beta=beta)
-        H = S.dot(X)
+        return features
 
-    # Densify
+    S = preprocess_graph(adj, beta=beta)
+    
+    H = S.dot(features)
+
     if sp.issparse(H):
         H = H.toarray()
     elif isinstance(H, np.matrix):
         H = np.asarray(H)
-
-
 
     return H

@@ -6,12 +6,22 @@ This module exposes:
 
 - LMGEC: estimator with fit / fit_predict and accessors.
 """
+import os 
+import sys
+import logging
+
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
+os.environ.setdefault('TF_ENABLE_ONEDNN_OPTS', '0')
 
 import tensorflow as tf
+
+tf.get_logger().setLevel(logging.ERROR)
+
+
 from sklearn.cluster import KMeans
 from sklearn.decomposition import TruncatedSVD
 import numpy as np
-from .utils import get_propagated_features
+from .utils import get_propagated_features, preprocess_features
 from .metrics import evaluate_clustering
 import warnings
 from sklearn import metrics 
@@ -33,6 +43,8 @@ def _update_rule_G(XW, F):
     distances = tf.reduce_mean(tf.math.squared_difference(XW, centroids_expanded), 2)
     G = tf.math.argmin(distances, 0, output_type=tf.dtypes.int32)
     return G
+
+
 
 @tf.function
 def _train_loop(Xs, F, G, alphas, k, max_iter):
