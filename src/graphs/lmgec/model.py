@@ -6,18 +6,8 @@ This module exposes:
 
 - LMGEC: estimator with fit / fit_predict and accessors.
 """
-import os 
-import sys
-import logging
-
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
-os.environ.setdefault('TF_ENABLE_ONEDNN_OPTS', '0')
 
 import tensorflow as tf
-
-tf.get_logger().setLevel(logging.ERROR)
-
-
 from sklearn.cluster import KMeans
 from sklearn.decomposition import TruncatedSVD
 import numpy as np
@@ -43,8 +33,6 @@ def _update_rule_G(XW, F):
     distances = tf.reduce_mean(tf.math.squared_difference(XW, centroids_expanded), 2)
     G = tf.math.argmin(distances, 0, output_type=tf.dtypes.int32)
     return G
-
-
 
 @tf.function
 def _train_loop(Xs, F, G, alphas, k, max_iter):
@@ -137,6 +125,10 @@ class LMGEC:
 
         if y_true is not None:
             self.y_true_ = np.array(y_true)
+        
+        for i in range(len(Xs)):
+            Xs[i] = preprocess_features(Xs[i], tf_idf=False, center=self.center_data, scale=self.scale)
+
 
         if adjs is not None:
             if len(Xs) != len(adjs):
@@ -252,10 +244,3 @@ class LMGEC:
         if self.XW_consensus_ is None:
             raise RuntimeError("Model not fitted.")
         return metrics.calinski_harabasz_score(self.XW_consensus_, self.G_)
-
-
-
-
-
-
-
