@@ -16,6 +16,8 @@ from .metrics import evaluate_clustering
 import warnings
 from sklearn import metrics 
 from .metrics import evaluate_clustering, clustering_accuracy, clustering_f1_score
+from scipy.io import savemat, loadmat
+import os
 
 def _update_rule_F(XW, G, K):
 
@@ -151,8 +153,6 @@ class LMGEC:
 
         Xs = preprocess_features(new_Xs, center=self.center_data, scale=self.scale)
 
-        # Ensure float64
-        Xs = [x.astype(np.float64) for x in Xs]
         n_views = len(Xs)
 
         # inital G and F 

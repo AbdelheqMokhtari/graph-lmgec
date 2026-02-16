@@ -26,6 +26,10 @@ def preprocess_graph(adj, beta=1.0):
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = sp.diags(r_inv)
     S = r_mat_inv.dot(adj)
+
+    # Test 
+    if type(S) == np.matrix:
+        S = np.asarray(S)
     
     return S
 
@@ -71,6 +75,11 @@ def normalize_features(
         features = TfidfTransformer(norm="l2").fit_transform(features)
     else:
         features = normalize(features, norm="l2")
+
+    
+    if type(features) != np.ndarray:
+        features = features.toarray()
+
 
     return features
 
