@@ -40,12 +40,14 @@ def _train_loop(Xs, F, G, alphas, k, max_iter):
     losses = tf.TensorArray(tf.float64, size=0, dynamic_size=True)
     prev_loss = tf.float64.max
 
+    
     for i in tf.range(max_iter):
         loss = 0
         XW_consensus = 0
+        
         for v in range(n_views):
             Wv = _update_rule_W(Xs[v], F, G)
-            XWv = Xs[v]@Wv
+            XWv = tf.linalg.matmul(Xs[v], Wv)
             XW_consensus += alphas[v] * XWv
             loss_v = tf.linalg.norm(Xs[v] - tf.gather(F @ tf.transpose(Wv), G))
             loss += alphas[v] * loss_v
@@ -124,26 +126,31 @@ class LMGEC:
         """
 
         if y_true is not None:
-            self.y_true_ = np.array(y_true)
-        
-        for i in range(len(Xs)):
-            Xs[i] = preprocess_features(Xs[i], tf_idf=False, center=self.center_data, scale=self.scale)
+            self.y_true_ = np.asarray(y_true)
 
+        # Validate adjacency list if provided
+        if adjs is not None and len(Xs) != len(adjs):
+            raise ValueError(
+                f"Mismatch: {len(Xs)} feature matrices vs {len(adjs)} adjacency matrices."
+            )
 
-        if adjs is not None:
-            if len(Xs) != len(adjs):
-                raise ValueError(f"Mismatch: {len(Xs)} features vs {len(adjs)} graphs.")
-            
-            print("Adjacency matrices provided. Computing propagation...")
-            new_Xs = []
-            for X, A in zip(Xs, adjs):
-                # Eq 6: H <- SX
-                # This combines Graph + Features into the final matrix we use
-                h_matrix = get_propagated_features(A, X, beta=self.beta, tf_idf=self.tf_idf, center=self.center_data, scale=self.scale)
-                new_Xs.append(h_matrix)
-            
-            Xs = new_Xs
-        
+        new_Xs = []
+
+        for i, X in enumerate(Xs):
+            A = adjs[i] if adjs is not None else None
+
+            # Eq 6: H <- S X (or identity if A is None)
+            H = get_propagated_features(
+                features=X,
+                adj=A,
+                beta=self.beta,
+                tf_idf=self.tf_idf,
+            )
+
+            new_Xs.append(H)
+
+        Xs = preprocess_features(new_Xs, center=self.center_data, scale=self.scale)
+
         # Ensure float64
         Xs = [x.astype(np.float64) for x in Xs]
         n_views = len(Xs)
@@ -159,11 +166,19 @@ class LMGEC:
             inertia = np.linalg.norm(XWv - Fv[Gv])
             alphas[v] = np.exp(-inertia/self.temperature)
             XW_consensus += alphas[v] * XWv
-        WX_consensus = XW_consensus / alphas.sum()
-        G, F = self._init_G_F(XW_consensus)
-
-        G, F, XW_consensus, loss_history = _train_loop(Xs, F, G, alphas, self.n_clusters, self.max_iter)
         
+
+        # using Safe Fallback (Uniform weighting) / if all views collapse means they are all equally bad
+        alpha_sum = alphas.sum()
+        if alpha_sum == 0:
+            alphas[:] = 1.0 / len(alphas)
+            alpha_sum = 1.0
+
+        XW_consensus /= alpha_sum
+
+        G, F = self._init_G_F(XW_consensus)
+        G, F, XW_consensus, loss_history = _train_loop(Xs, F, G, alphas, self.n_clusters, self.max_iter)
+
         self.G_ = G.numpy()
         self.F_ = F.numpy()
         self.XW_consensus_ = XW_consensus.numpy()

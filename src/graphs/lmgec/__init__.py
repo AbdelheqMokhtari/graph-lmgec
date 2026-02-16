@@ -22,7 +22,8 @@ from .metrics import (
     evaluate_clustering,
 )
 from .utils import (
-    get_propagated_features
+    get_propagated_features,
+    preprocess_features
 )
 
 from .graph_construction import GraphBuilder
