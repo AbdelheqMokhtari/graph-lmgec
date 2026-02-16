@@ -75,62 +75,53 @@ def normalize_features(
     return features
 
 
-
 def preprocess_features(features, center=False, scale=False):
     """
-    Preprocess a feature matrix by optionally centering and/or scaling.
-
-    This function applies standardization to the input features using
-    scikit-learn's ``StandardScaler``. Centering (mean removal) and scaling
-    (unit variance) can be enabled independently. For sparse input matrices,
-    centering is automatically disabled to preserve sparsity and avoid
-    excessive memory usage.
+    Preprocess multiple feature matrices (views) by optionally centering
+    and/or scaling each view independently.
 
     Parameters
     ----------
-    features : numpy.ndarray or scipy.sparse.spmatrix
-        Feature matrix of shape (n_samples, n_features). Can be dense or sparse.
+    features : list of numpy.ndarray or scipy.sparse.spmatrix
+        List of feature matrices, one per view. Each matrix has shape
+        (n_samples, n_features_v).
 
     center : bool, optional (default=False)
-        Whether to center features by removing the mean (mean = 0).
-        This is commonly required for linear algebra–based methods
-        (e.g., LMGEC).
+        Whether to center features by removing the mean (per view).
 
     scale : bool, optional (default=False)
-        Whether to scale features to unit variance (variance = 1).
-        When both ``center`` and ``scale`` are True, the data is
-        standardized ("centré-réduit").
+        Whether to scale features to unit variance (per view).
 
     Returns
     -------
-    numpy.ndarray or scipy.sparse.spmatrix
-        The transformed feature matrix with the same shape as the input.
-        The output type (dense or sparse) matches the input type.
-
-    Notes
-    -----
-    - Mean-centering sparse matrices is not supported, as it would destroy
-      sparsity and significantly increase memory usage. If ``center=True``
-      and the input is sparse, centering is automatically disabled.
-    - If both ``center`` and ``scale`` are False, the input features are
-      returned unchanged.
+    list of numpy.ndarray or scipy.sparse.spmatrix
+        List of transformed feature matrices. Each output matches the
+        input type (dense or sparse) of its corresponding view.
     """
-  
+
     if not (center or scale):
         return features
 
-    # Sparse matrices cannot be mean-centered safely
-    if sp.issparse(features) and center:
-        # SAFE MODE: disable centering to preserve sparsity and memory
-        print(
-            "Warning: Disabling centering on sparse data to prevent memory issues."
-        )
-        center = False
+    processed = []
 
-    scaler = StandardScaler(with_mean=center, with_std=scale)
-    features = scaler.fit_transform(features)
+    for v, X in enumerate(features):
 
-    return features
+        # Sparse matrices cannot be mean-centered safely
+        local_center = center
+        if sp.issparse(X) and center:
+            print(
+                f"Warning (view {v}): Disabling centering on sparse data "
+                "to preserve sparsity."
+            )
+            local_center = False
+
+        scaler = StandardScaler(with_mean=local_center, with_std=scale)
+        X_proc = scaler.fit_transform(X)
+
+        processed.append(X_proc)
+
+    return processed
+
 
 def get_propagated_features(
     features,
@@ -159,9 +150,9 @@ def get_propagated_features(
     # Converting the matrix into a dense matrix may crash the RAM 
     # the original idea behind it was when we do propagation the H it becomes sparse  
 
-    # if sp.issparse(H):
-    #    H = H.toarray()
-    # elif isinstance(H, np.matrix):
-    #    H = np.asarray(H)
+    if sp.issparse(H):
+        H = H.toarray()
+    elif isinstance(H, np.matrix):
+        H = np.asarray(H)
 
     return H
