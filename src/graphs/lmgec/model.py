@@ -39,13 +39,17 @@ def _update_rule_G(XW, F):
 @tf.function
 def _train_loop(Xs, F, G, alphas, k, max_iter):
     n_views = len(Xs)
-    losses = tf.TensorArray(tf.float64, size=0, dynamic_size=True)
+    losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
     prev_loss = tf.float64.max
 
-    
+    XW_consensus = tf.zeros(
+        (tf.shape(Xs[0])[0], tf.shape(F)[1]),
+        dtype=tf.float32
+    )
     for i in tf.range(max_iter):
-        loss = 0
-        XW_consensus = 0
+        loss = tf.constant(0.0, dtype=tf.float32)
+
+        XW_consensus = tf.zeros_like(XW_consensus)
         
         for v in range(n_views):
             Wv = _update_rule_W(Xs[v], F, G)
@@ -159,6 +163,7 @@ class LMGEC:
         alphas = np.zeros(n_views)
 
         XW_consensus = 0
+
         for v in range(n_views):
             Wv = self._init_W(Xs[v])
             XWv = Xs[v]@Wv
@@ -177,7 +182,17 @@ class LMGEC:
         XW_consensus /= alpha_sum
 
         G, F = self._init_G_F(XW_consensus)
-        G, F, XW_consensus, loss_history = _train_loop(Xs, F, G, alphas, self.n_clusters, self.max_iter)
+
+        Xs_tf = [tf.convert_to_tensor(X, dtype=tf.float32) for X in Xs]
+        F_tf = tf.convert_to_tensor(F, dtype=tf.float32)
+        G_tf = tf.convert_to_tensor(G, dtype=tf.int32)
+        alphas_tf = tf.convert_to_tensor(alphas, dtype=tf.float32)
+
+        G, F, XW_consensus, loss_history = _train_loop(
+            Xs_tf, F_tf, G_tf, alphas_tf,
+            self.n_clusters, self.max_iter
+        )
+
 
         self.G_ = G.numpy()
         self.F_ = F.numpy()
